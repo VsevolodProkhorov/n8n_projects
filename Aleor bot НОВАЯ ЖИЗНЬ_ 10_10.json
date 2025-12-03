@@ -1,0 +1,2950 @@
+{
+  "name": "Aleor bot НОВАЯ ЖИЗНЬ| 10/10",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "id": "1828aea1-cb35-4326-921d-bf9188e6f50d",
+      "name": "Telegram Trigger4",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "position": [
+        -3424,
+        416
+      ],
+      "webhookId": "066180bd-d5d6-4a1b-88f0-f1793503e664",
+      "typeVersion": 1,
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isCallback}}",
+              "value2": "={{ true }}"
+            }
+          ]
+        }
+      },
+      "id": "f56684d5-bf41-4247-8bf6-47d458e8ecb4",
+      "name": "Is Callback?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -2288,
+        -272
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = items[0]?.json ?? {};\nconst prevSession = src.session || {};\n\n// -------------------------------------------------\n// 1) Базовая инфа из апдейта Telegram\n// -------------------------------------------------\nlet chatId = '';\nlet userId = '';\nlet userName = 'User';\nlet messageId = '';\nlet isCallback = false;\nlet callbackQueryId = null;\nlet text = '';\nlet rawCommand = '';\n\nif (src.message) {\n  const m = src.message;\n  chatId = m.chat?.id;\n  userId = m.from?.id;\n  userName = m.from?.first_name || 'User';\n  messageId = m.message_id;\n  text = (m.text || '').trim();\n} else if (src.callback_query) {\n  const c = src.callback_query;\n  isCallback = true;\n  chatId = c.message?.chat?.id;\n  userId = c.from?.id;\n  userName = c.from?.first_name || 'User';\n  messageId = c.message?.message_id;\n  callbackQueryId = c.id;\n  rawCommand = (c.data || '').trim(); // callback_data\n}\n\nlet session = { ...prevSession };\n\n// -------------------------------------------------\n// 2) Команда / контекст\n// -------------------------------------------------\n\nconst raw = (text || '').trim();\nconst low = raw.toLowerCase();\n\nconst isStart = !isCallback && /^[/\\\\]start(?:@\\w+)?(?:\\s|$)/i.test(raw);\n\nlet command = rawCommand;\n\nif (isStart) {\n  command = 'main';\n  session = { menuAction: 'main' };\n} else if (!isCallback) {\n  if (low.includes('оплата') || low.includes('доставка')) command = 'payment';\n  else if (low.includes('заказ')) command = 'order';\n  else if (low.includes('как') && low.includes('заказ')) command = 'howto';\n  else if (!command) {\n    const ctx = prevSession.menuAction;\n    command = ['order','stock','payment','howto'].includes(ctx)\n      ? ctx\n      : 'default';\n  }\n}\n\n// -------------------------------------------------\n// 3) Меню и тексты\n// -------------------------------------------------\n\nconst MENU_CONFIG = {\n  main: {\n    text: `👋 Добро пожаловать в магазин одежды <b>ALÉOR</b>\\n\\nВыберите нужный пункт ниже:`,\n    keyboard: [\n      [{ text: '🛒 Персональный заказ', callback_data: 'order' }],\n      [{ text: '📦 Список товаров в наличии', callback_data: 'stock' }],\n      [{ text: '🧾 Как оформить заказ?', callback_data: 'howto' }],\n      [{ text: '💳 Оплата и доставка', callback_data: 'payment' }]\n    ],\n    action: 'show_menu',\n  },\n\n  order: {\n    text:\n      '🛍️ <b>Что именно Вас интересует?</b>\\n\\n' +\n      'Напишите, пожалуйста, <b>название</b> товара или пришлите ссылку <b>с указанием Вашего размера.</b>\\n\\n' +\n      'После этого наш менеджер свяжется с Вами в ближайшее время!🤝',\n    keyboard: [],\n    action: 'collect_order',\n  },\n\n  stock: {\n    text:\n      '📦 Здесь будет список товаров, доступных в наличии.\\n\\n',\n    keyboard: [\n      [{ text: '📃 Посмотреть список товаров', callback_data: 'show_list' }]\n    ],\n    action: 'show_stock_menu',\n  },\n\n  payment: {\n    text:\n      '💶 <b>Возможности оплаты и 🚚 доставки Вашего заказа:</b>\\n\\n' +\n      '<b>Доставка осуществляется по всему миру!</b>\\n\\n' +\n      '<b>Оплата осуществляется:</b>\\n' +\n      '• <b>Наличными курьеру</b> при получении товара.\\n' +\n      '• <b>Онлайн перевод.</b>\\n\\n' +\n      '<b>* Для индивидуальных заказов требуется аванс.</b>',\n    keyboard: [],\n    action: 'show_payment',\n  },\n\n  howto: {\n    text:\n      '🧾<b>Как оформить заказ?</b>\\n\\n' +\n      'Свяжитесь, пожалуйста, с менеджером @ALEOR_BUYER для оформления заказа.',\n    keyboard: [],\n    action: 'show_help',\n  },\n\n  default: {\n    text:\n      '🤔 К сожалению, я не понял ваш вопрос.\\nВыберите пункт меню ниже:',\n    keyboard: [\n      [{ text: '🛒 Персональный заказ', callback_data: 'order' }],\n      [{ text: '📦 Список товаров', callback_data: 'stock' }],\n      [{ text: '🧾 Как заказать?', callback_data: 'howto' }],\n    ],\n    action: 'show_menu',\n  },\n};\n\n// -------------------------------------------------\n// 4) Intents\n// -------------------------------------------------\nlet intent = 'show_menu';\nlet payload = {};\n\nswitch (command) {\n  case 'main':\n    intent = 'show_menu';\n    session.menuAction = 'main';\n    break;\n\n  case 'order':\n    intent = 'collect_order';\n    session.menuAction = 'order';\n    break;\n\n  case 'stock':\n    intent = 'show_stock_menu';\n    session.menuAction = 'stock';\n    break;\n\n  case 'show_list':\n  case 'products_more':  // кнопка \"Показать ещё\"\n    intent = 'check_stock';   // здесь будет Airtable + пагинация\n    session.menuAction = 'stock';\n    break;\n\n  case 'payment':\n    intent = 'show_payment';\n    session.menuAction = 'payment';\n    break;\n\n  case 'howto':\n    intent = 'show_help';\n    session.menuAction = 'howto';\n    break;\n\n  default:\n    intent = 'confused';\n    session.menuAction = 'main';\n    break;\n}\n\n// -------------------------------------------------\n// 5) Персональный заказ\n// -------------------------------------------------\nif (intent === 'collect_order' && text) {\n  payload.orderText = text;\n  payload.telegramUserId = userId;\n  payload.customerName = userName;\n  payload.chatId = chatId;\n}\n\n// -------------------------------------------------\n// 6) Выход\n// -------------------------------------------------\n\nconst out = {\n  ...src,\n  messageId,\n  callbackQueryId,\n  isCallback,\n  userId,\n  userName,\n  command,\n  intent,\n  payload,\n  session,\n  menuConfig: MENU_CONFIG,\n};\n\nconsole.log(`[bot] intent=${intent} cmd=${command} user=${userName}`);\nreturn [{ json: out }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2432,
+        464
+      ],
+      "id": "edfeb043-5f3b-4e88-be17-e70c7ea4c90f",
+      "name": "Parse Update"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = items[0].json || {};\n\nconst chatId = input.chatId;            // <- из Parse Update\nconst command = input.command || 'main';\nconst firstName = input.userName || '';\n\nconst cfg = input.menuConfig || {};\nconst block = cfg[command] ? cfg[command] : cfg['default'] || {};\n\nlet text = String(block.text || '').replace(/{firstName}/g, firstName);\ntext = text.replace(/{\\w+}/g, '');\n\nconst inline_keyboard = Array.isArray(block.keyboard) ? block.keyboard : [];\n\nreturn [\n  {\n    json: {\n      chat_id: chatId,     // <- ВАЖНО: chat_id (snake_case), не chatId\n      text,\n      parse_mode: 'HTML',\n      disable_web_page_preview: true,\n      reply_markup: { inline_keyboard },\n\n      // сервисные поля на будущее:\n      original_chat_id: chatId,\n      userName: firstName,\n      command,\n    }\n  }\n];\n"
+      },
+      "id": "caa6c785-d57d-445e-ae27-0c49be35a523",
+      "name": "Build Menu Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1728,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{$json.callbackQueryId}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -2128,
+        -288
+      ],
+      "id": "2c4a1bec-809b-4430-b927-043f38a57cfd",
+      "name": "Answer Callback",
+      "webhookId": "1da248a0-1e8a-47e3-9759-8bb6766699ae",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "show_menu",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "1ad48beb-a711-4aed-9743-314467b2e7cc"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "77ed43d4-6f75-4229-bf0f-c10b8f5ffcf5",
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "collect_order",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1c72b4f1-cbf6-4743-8f44-eecd4720b61f",
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "check_stock",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4ea79150-b33e-4a81-94c8-78c8a09146de",
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "show_payment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1d1e4019-3b03-4343-b79c-73daac0a99e9",
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "show_help",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "768c2b51-7f75-40bd-b589-f16a320a6296",
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "confused",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b59187ee-5d6c-4bbb-a4dc-8a17bced4e69",
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "show_stock_menu",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -2048,
+        592
+      ],
+      "id": "d7c41de1-3b45-4b93-984f-c538fcf2b8f1",
+      "name": "Route by Intent"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.menuConfig.payment.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1296,
+        880
+      ],
+      "id": "b3823af4-af9e-4ee8-bc39-9596f5113022",
+      "name": "Reply Payment",
+      "webhookId": "568ce443-c39d-41ae-bd2e-2ba51847e66c",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{$json.menuConfig.howto.text}}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1280,
+        1040
+      ],
+      "id": "877860ec-c8c3-4e90-beef-a95f296957dc",
+      "name": "Reply HowTo",
+      "webhookId": "60fdc38d-f73f-4ad5-b5aa-a88a809d1c79",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "=8210590781",
+        "text": "={{ $json.manager_text }} ",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1936,
+        1616
+      ],
+      "id": "dc34406b-a2b3-42d3-83f8-e7ddae1a0332",
+      "name": "Notify Manager",
+      "webhookId": "7ee165df-dddd-4605-afa6-6190b287377c",
+      "notesInFlow": false,
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_id }}",
+        "text": "✅ Спасибо за заказ!  Мы уже передали его менеджеру. Сейчас проверим наличие и уточним цену/доставку. Ожидайте, пожалуйста 🙌",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1712,
+        1424
+      ],
+      "id": "221bad15-feac-4fd9-af36-8a919783da8c",
+      "name": "Reply Customer",
+      "webhookId": "73ef381c-3840-48cc-92b3-f292ef046105",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b99a79ff-9110-4dca-9d9c-cd74f9a7104d",
+              "leftValue": "={{$json.Order}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2816,
+        1056
+      ],
+      "id": "d05fcb86-286d-41ef-8678-3ace9d300ba3",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "text": "={{$json.text}}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[0][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[0][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1232,
+        32
+      ],
+      "id": "91d1f59f-672a-4778-802b-44cfe35a69c6",
+      "name": "Start menu",
+      "webhookId": "cc95ad0d-2a6e-4707-96be-03a6d4cae13e",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ты помощник отдела закупок одежды.\n\nНа вход ты получаешь СЫРОЕ сообщение клиента в Telegram.\nТвоя задача — понять, это попытка оформить заказ вещи или это нерелевантный текст.\n\nЕсли клиент действительно описывает товар (бренд, модель, ссылка, артикул, тип вещи, размер и т.п.),\nто заполни поля и поставь \"valid_order\": true.\n\nЕсли сообщение не похоже на заказ одежды/обуви/аксессуара (это бред, шутка, вопрос не по теме, случайный набор символов и т.д.),\nпоставь \"valid_order\": false\nи все остальные поля, кроме raw_message, заполни null.\n\nТЫ ВСЕГДА возвращаешь ОДИН валидный JSON и НИЧЕГО больше:\n{\n\"valid_order\": true | false,\n\"product_name\": \"название/модель/бренд или артикул, если он есть\",\n\"size\": \"размер, если указан, иначе null\",\n\"link\": \"прямая ссылка на товар (если есть), иначе null\",\n\"raw_message\": \"оригинальный текст клиента без изменений\"\n}\n\nПримеры НЕЗАКАЗА (в таких случаях valid_order = false):\n\n\"134к7равгцтщшч1\"\n\n\"Сколько стоит купить солнце?\"\n\n\"Игорь украл мою футболку\"\n\n\"алё ты кто\"\n\n\"привет\"\n\nСообщение клиента:\n\"{{ $('Telegram Trigger4').item.json.message.text }}\"",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -2560,
+        1216
+      ],
+      "id": "59428457-0bc2-4303-a655-52ac31faccb7",
+      "name": "AI Agent",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -2592,
+        1408
+      ],
+      "id": "472016cb-b88c-4c73-8cfd-b096e81f9bed",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "9KAn9cn2Bwo9cRDI",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Берём сырое текстовое поле output из AI Agent\n// (предполагаем, что AI Agent кладёт свой ответ в json.output)\nconst aiAgentOutputRaw = $input.all()[0]?.json?.output;\n\n// 2. Парсим JSON из ответа модели\nlet parsed = {};\ntry {\n  parsed = JSON.parse(aiAgentOutputRaw);\n} catch (e) {\n  // Если модель вернула невалидный JSON или бред — страхуемся\n  parsed = {\n    valid_order: false,\n    product_name: null,\n    size: null,\n    link: null,\n    raw_message: aiAgentOutputRaw || null,\n  };\n}\n\n// Подстрахуем обязательные ключи, даже если модель что-то не вернула\nconst valid_order =\n  typeof parsed.valid_order === \"boolean\" ? parsed.valid_order : false;\n\nconst product_name = parsed.product_name ?? null;\nconst size = parsed.size ?? null;\nconst link = parsed.link ?? null;\nconst raw_message = parsed.raw_message ?? aiAgentOutputRaw ?? null;\n\n// 3. Достаём данные Telegram из ноды Trigger\n//    (берём именно Telegram Trigger4, как ты делал)\nconst telegramNodeData = $(\"Telegram Trigger4\").all()[0]?.json;\nconst tgMsg = telegramNodeData?.message;\nconst tgFrom = tgMsg?.from;\n\nconst telegram_username = tgFrom?.username || \"без username\";\nconst telegram_id = tgFrom?.id || null;\n\n// 4. Собираем текст для менеджера (используем ТОЛЬКО если valid_order === true)\n//    Мы всё равно вернём manager_text вниз по потоку — IF-нода сама решит,\n//    отправлять его менеджеру или нет.\nconst manager_text =\n`Новый запрос от клиента:\n\nОригинальное сообщение:\n\"${raw_message}\"\n\nРаспознано:\nТовар: ${product_name}\nРазмер: ${size}\nСсылка: ${link}\n\nКлиент: @${telegram_username} (ID: ${telegram_id})`;\n\n// 5. Отдаём один item дальше\nreturn [\n  {\n    json: {\n      // флаг пригодности\n      valid_order,\n\n      // данные для менеджера\n      manager_text,\n      product_name,\n      size,\n      link,\n      raw_message,\n\n      // данные телеги\n      telegram_username,\n      telegram_id,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2176,
+        1200
+      ],
+      "id": "ffdb82d8-82cc-4188-a966-b444a9b804de",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $('Route by Intent').item.json.menuConfig.stock.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -592,
+        -208
+      ],
+      "id": "68fc451c-91b8-4613-84e4-48640a81a7d7",
+      "name": "How to check?",
+      "webhookId": "a4f2fb78-0394-4acf-8ef2-a09bab3bd037",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $('Route by Intent').item.json.menuConfig.default.text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $('Route by Intent').item.json.menuConfig.default.keyboard[0][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Route by Intent').item.json.menuConfig.default.keyboard[0][0].callback_data }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $('Route by Intent').item.json.menuConfig.default.keyboard[1][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Route by Intent').item.json.menuConfig.default.keyboard[1][0].callback_data }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $('Route by Intent').item.json.menuConfig.default.keyboard[2][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Route by Intent').item.json.menuConfig.default.keyboard[2][0].callback_data }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $('Route by Intent').item.json.menuConfig.default.keyboard[3][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Route by Intent').item.json.menuConfig.default.keyboard[3][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1328,
+        1344
+      ],
+      "id": "a988cd90-9180-4640-a78f-b80461ea49ec",
+      "name": "Confused",
+      "webhookId": "09150612-c16e-4634-bb91-b0f7e9d72540",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $('Parse Update').first().json.menuConfig.order.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -3264,
+        1328
+      ],
+      "id": "f7fd774a-eba8-4ec4-947e-ce712f490f13",
+      "name": "Order",
+      "webhookId": "4b23fa9a-a670-492c-8d75-496b03d1eada",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst input = items[0]?.json || {};\n\n// Достаём chat_id по твоей цепочке приоритетов\nconst chat_id =\n\tinput?.message?.chat_id ||\n\tinput?.session?.chatId ||\n\tinput?.chatId ||\n\tinput?.userId ||\n\tnull;\n\nconst command = input.command || 'main';\nconst firstName = input.userName || '';\n\nconst cfg = input.menuConfig || {};\nconst block = cfg[command] ? cfg[command] : (cfg['default'] || {});\n\n// Сборка текста\nlet text = String(block.text || '').replace(/{firstName}/g, firstName);\n// Удаляем любые плейсхолдеры {something}\ntext = text.replace(/{\\w+}/g, '');\n\nconst inline_keyboard = Array.isArray(block.keyboard) ? block.keyboard : [];\n\nreturn [\n\t{\n\t\tjson: {\n\t\t\tchat_id, // <- только snake_case, это то что пойдёт в Telegram sendMessage\n\t\t\ttext,\n\t\t\tparse_mode: 'HTML',\n\t\t\tdisable_web_page_preview: true,\n\t\t\treply_markup: { inline_keyboard },\n\n\t\t\t// сервисные поля, которые можно юзать потом во flow\n\t\t\tuserName: firstName,\n\t\t\tcommand,\n\t\t},\n\t},\n];\n"
+      },
+      "id": "071c17b7-9719-49fe-bfd8-9e4378f5f292",
+      "name": "Build Menu Message1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1520,
+        1216
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "0"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 1
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -3104,
+        1328
+      ],
+      "id": "b19f7301-560e-4808-b772-6ef6a8dbd232",
+      "name": "Order + 1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "1"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1776,
+        1616
+      ],
+      "id": "5ddf3663-53b8-4461-9690-28a868259ad6",
+      "name": "Order -1"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -2848,
+        256
+      ],
+      "id": "20fcc696-2c1f-4363-ac30-cf8143ba178e",
+      "name": "Order, Stock"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2608,
+        384
+      ],
+      "id": "7102f42a-8b04-4c11-b4f9-d1b081c5235e",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "85056e43-1404-451e-95fa-6162d52abe75",
+              "name": "chat_id",
+              "value": "={{ $json.message?.chat?.id || $json.callback_query?.message?.chat?.id }}\n\n\n",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3200,
+        512
+      ],
+      "id": "6d25858e-bc79-4112-ae85-0ffe3d9c695a",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "1"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        1344
+      ],
+      "id": "05541d9d-da7c-49d9-8c96-c2b269eb3571",
+      "name": "Order -"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $json.message?.chat?.id || $json.callback_query?.message?.chat?.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $json.message?.chat?.id || $json.callback_query?.message?.chat?.id }}",
+            "menuAction": "={{ $json.session.menuAction }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "menuAction",
+              "displayName": "menuAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -2256,
+        384
+      ],
+      "id": "278a4bba-aaa6-4669-9eda-279421bc633d",
+      "name": "Save Session"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $json.message?.chat?.id || $json.callback_query?.message?.chat?.id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -2976,
+        512
+      ],
+      "id": "97a8edff-203e-46a4-8578-3dcb0e84f0be",
+      "name": "Get session",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e166f223-1925-42b5-bd80-fa0c0427c143",
+              "name": "session",
+              "value": "={{ { \"menuAction\": $json.menuAction } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2768,
+        576
+      ],
+      "id": "e339970a-f07c-4e31-b224-da9ba9fcdbe2",
+      "name": "Attach session"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $('If').item.json.chat_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $('If').item.json.chat_id }}",
+            "menuAction": "=main"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "menuAction",
+              "displayName": "menuAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1632,
+        1616
+      ],
+      "id": "3aeb3ce7-e9c2-49d5-9ed1-2c4bafb7246c",
+      "name": "Save Session Reset1"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $json.result.chat.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "menuAction": "=main"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "menuAction",
+              "displayName": "menuAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        1040
+      ],
+      "id": "486bb00b-4a0e-4cd0-a66d-a1a7ffa28a33",
+      "name": "Save Session Reset4"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $json.result.chat.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "menuAction": "=main"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "menuAction",
+              "displayName": "menuAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        880
+      ],
+      "id": "78e916e1-e514-4296-92d5-38bf46f00efa",
+      "name": "Save Session Reset5"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('If').item.json.chat_id }}",
+        "text": "К сожалению, я не понял, что вы хотели заказать. Пожалуйста, сформулируйте заказ иначе .",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -2320,
+        1456
+      ],
+      "id": "d75772ed-4653-4dc8-8f5a-c6b493be76b7",
+      "name": "Error in the order",
+      "webhookId": "4dc50b04-432a-4fee-85a2-130cdeee1c52",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1b545543-ba4e-4d86-a585-6ac63f811f86",
+              "leftValue": "={{ $json.valid_order }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2000,
+        1200
+      ],
+      "id": "4f716c08-84dc-4df7-883e-a2d84eb07a49",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appQu6xEHi6aHAuDM",
+          "mode": "list",
+          "cachedResultName": "Product Catalog",
+          "cachedResultUrl": "https://airtable.com/appQu6xEHi6aHAuDM"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblbMlEHH6iZ0D0na",
+          "mode": "list",
+          "cachedResultName": "Products",
+          "cachedResultUrl": "https://airtable.com/appQu6xEHi6aHAuDM/tblbMlEHH6iZ0D0na"
+        },
+        "filterByFormula": "=AND(\n  {product_number} = \"{{ $json.payload.productNumber }}\",\n  {Size} = \"{{ $json.payload.size }}\"\n)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -816,
+        -784
+      ],
+      "id": "9f4a6768-18e0-4d42-a90a-c92ad51088b9",
+      "name": "Find Variant1",
+      "alwaysOutputData": true,
+      "executeOnce": false,
+      "retryOnFail": false,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "wdLyI0SCjf0ywCzo",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route by Intent').item.json.chat_id }}",
+        "text": "=К сожалению, данного товара нет в наличии 😔",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -192,
+        -896
+      ],
+      "id": "c90430f5-65a2-49a8-b2f2-153457f7edec",
+      "name": "Reply Out of Stock1",
+      "webhookId": "fabd37ff-3b33-4ef0-9d0d-227c0489722d",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $('Route by Intent').item.json.chat_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $('Route by Intent').item.json.chat_id }}",
+            "menuAction": "=main"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "menuAction",
+              "displayName": "menuAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        112,
+        -896
+      ],
+      "id": "afc11a0e-9762-40b3-af4e-6315a71d5a64",
+      "name": "Save Session Reset"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $('Route by Intent').item.json.chat_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $('Route by Intent').item.json.chat_id }}",
+            "menuAction": "=main"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "menuAction",
+              "displayName": "menuAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        112,
+        -1056
+      ],
+      "id": "775d4b28-9cd5-41a4-940f-743dc40f5181",
+      "name": "Save Session Reset6"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "db318b68-cbb5-40ac-88f9-3541a65e5de7",
+                    "leftValue": "={{ $json.product_number }}",
+                    "rightValue": 0,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ 0 }}",
+                    "rightValue": 0,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    },
+                    "id": "24b485c7-084e-4584-833c-ce3b7d7285b8"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -560,
+        -816
+      ],
+      "id": "0e7c665b-0bd0-4da4-85bc-fd7c842e6f02",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "77df361e-b83f-4676-bc75-30bebcfb1b14",
+              "leftValue": "={{ $json.Stock }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -368,
+        -960
+      ],
+      "id": "4414d96d-510f-470b-afe1-2f3e7f059dda",
+      "name": "In Stock?2"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route by Intent').item.json.chat_id }}",
+        "text": "=К сожалению, я не нашел выбранный вами товар в нашем ассортименте. Возможно, вы ввели неправильный код. Попробуйте еще раз 😁",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -368,
+        -736
+      ],
+      "id": "69458a27-0a0c-475b-be4e-d465f6eaff14",
+      "name": "Reply HowTo2",
+      "webhookId": "44efcf8b-9571-4fd3-8b10-664ba6b1d07b",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $json.result.chat.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "menuAction": "=main"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "menuAction",
+              "displayName": "menuAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        -208
+      ],
+      "id": "f1ffb22e-e53e-4905-9649-81f135e47201",
+      "name": "Save Session Reset7"
+    },
+    {
+      "parameters": {
+        "content": "## Сделать так чтобы при нажатии на кнопку строго выходила инструкция.\n",
+        "height": 400,
+        "width": 672
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3552,
+        1088
+      ],
+      "id": "5e019b3b-8b51-4511-8e27-e1d26562e633",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "={{ $('Route by Intent').item.json.chat_id }}",
+        "file": "={{ $json['Product Photo'][0].url }}",
+        "additionalFields": {
+          "caption": "={{ $json.Title }} В наличии!✅\n{{ $json.Size }} размер"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -192,
+        -1056
+      ],
+      "id": "4069fe9b-5be5-423e-8795-31862dacb672",
+      "name": "Send a photo reply",
+      "webhookId": "17fc5cc6-3242-4434-927f-35348eba5915",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "=976192165",
+        "text": "={{ $json.manager_text }} ",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1936,
+        1808
+      ],
+      "id": "75342fb8-c1d3-4a3d-9b10-ba3e21e92be2",
+      "name": "Notify Manager1",
+      "webhookId": "d4258212-199c-4e2e-a672-9a87807185fa",
+      "notesInFlow": false,
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "1"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1760,
+        1808
+      ],
+      "id": "a94a64a3-c0db-43c6-9c9a-bbb45ccaee16",
+      "name": "Order -2"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "8udsLm3XQAzB9uW9",
+          "mode": "list",
+          "cachedResultName": "Sessions",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/8udsLm3XQAzB9uW9"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $('If').item.json.chat_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $('If').item.json.chat_id }}",
+            "menuAction": "=main"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "menuAction",
+              "displayName": "menuAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1600,
+        1808
+      ],
+      "id": "b6ee93a4-a692-430c-8437-a2e147f41038",
+      "name": "Save Session Reset2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "1"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        1040
+      ],
+      "id": "55a6b282-397c-4e1e-9e8c-15196941153a",
+      "name": "Order --"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "1"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        880
+      ],
+      "id": "a1416a68-2614-431f-acd6-51d88215db13",
+      "name": "Order-"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "1"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        -208
+      ],
+      "id": "35eef8c2-4234-4f0d-95c9-1e4c5d354ebb",
+      "name": "Order-1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "1"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        288,
+        -848
+      ],
+      "id": "f3257154-fe05-4bab-aec0-781affad1d51",
+      "name": "Order-2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cRLJHAJP4PjgeIcI",
+          "mode": "list",
+          "cachedResultName": "Variables",
+          "cachedResultUrl": "/projects/J79gBJLVPPntD8dp/datatables/cRLJHAJP4PjgeIcI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "Order",
+              "keyValue": "1"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Stock",
+              "displayName": "Stock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Order",
+              "displayName": "Order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        288,
+        -1056
+      ],
+      "id": "786c709b-0afe-4148-a9af-6e54e7eaba7f",
+      "name": "Order-3"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route by Intent').first().json.callback_query.message.chat.id }}",
+        "text": "={{ $json.text }} ",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "➡️ Показать ещё",
+                    "additionalFields": {
+                      "callback_data": "products_more"
+                    }
+                  },
+                  {
+                    "text": "🔙 В меню",
+                    "additionalFields": {
+                      "callback_data": "main"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1040,
+        304
+      ],
+      "id": "59f14ee7-9840-4868-af1d-9cf33d24d3c8",
+      "name": "Все позиции",
+      "webhookId": "568ce443-c39d-41ae-bd2e-2ba51847e66c",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appQu6xEHi6aHAuDM",
+          "mode": "list",
+          "cachedResultName": "Product Catalog",
+          "cachedResultUrl": "https://airtable.com/appQu6xEHi6aHAuDM"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblbMlEHH6iZ0D0na",
+          "mode": "list",
+          "cachedResultName": "Products",
+          "cachedResultUrl": "https://airtable.com/appQu6xEHi6aHAuDM/tblbMlEHH6iZ0D0na"
+        },
+        "options": {
+          "view": {
+            "__rl": true,
+            "value": "viwKbgWhHlBsjd40Q",
+            "mode": "list",
+            "cachedResultName": "Grid view",
+            "cachedResultUrl": "https://airtable.com/appQu6xEHi6aHAuDM/tblbMlEHH6iZ0D0na/viwKbgWhHlBsjd40Q"
+          }
+        }
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1648,
+        432
+      ],
+      "id": "c1a52577-991d-422f-935a-3b7f07ebdd17",
+      "name": "Find Variant",
+      "alwaysOutputData": false,
+      "executeOnce": false,
+      "retryOnFail": false,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "wdLyI0SCjf0ywCzo",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "",
+        "height": 288,
+        "width": 832,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -288
+      ],
+      "id": "2cbd065f-7d11-4c45-a823-992a9ce7425d",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "",
+        "height": 624,
+        "width": 1552,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        -1152
+      ],
+      "id": "3d35b24d-6ae5-45f8-b8da-daaa36e3ab83",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Этот код ожидает, что вход в ноду — это items из Airtable\n\nconst PAGE_SIZE = 20;\n\n// Берём все записи из Airtable\nconst records = items.map(i => i.json);\n\n// Берём session, если она была протащена до Airtable\nlet session = (records[0] && records[0].session) ? records[0].session : {};\nlet offset = session.listOffset || 0;\n\n// Подстрахуемся\nif (offset < 0) offset = 0;\nif (offset >= records.length) offset = 0;\n\n// Текущая \"страница\"\nconst page = records.slice(offset, offset + PAGE_SIZE);\n\n// Строим текст для Telegram\nlet text = '📦 <b>Список товаров в наличии</b>:\\n\\n';\n\npage.forEach((p, index) => {\n  const num = offset + index + 1;\n\n  const brand = p.Brand?.value || '';\n  const size  = p.Size?.value || '';\n  const price = p.Price ? `${p.Price} ₽` : '';\n  const desc  = p.Description || '';\n\n  text += `${num}. <b>${brand}</b>\\n`;\n  if (size)  text += `Размер: ${size}\\n`;\n  if (price) text += `Цена: ${price}\\n`;\n  if (desc)  text += `${desc}\\n`;\n  text += `\\n`;\n});\n\n// Есть ли ещё товары?\nconst hasMore = (offset + PAGE_SIZE) < records.length;\n\n// Обновляем offset в сессии\nif (hasMore) {\n  session.listOffset = offset + PAGE_SIZE;\n} else {\n  session.listOffset = 0; // сброс\n}\n\n// Никаких кнопок и chat_id здесь не трогаем\nreturn [\n  {\n    json: {\n      text,\n      session,\n      hasMore,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1456,
+        432
+      ],
+      "id": "f848925d-441a-4369-8188-4f6f7742854e",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ \n  $node[\"Route by Intent\"].json.callback_query?.chat_id \n    || $node[\"Telegram Trigger4\"].json.callback_query?.message?.chat?.id || $('Telegram Trigger4').item.json.message.chat.id }}\n",
+        "text": "={{$json.text}}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[0][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[0][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[1][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[1][0].callback_data }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[2][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[2][0].callback_data }}"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.reply_markup.inline_keyboard[3][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.reply_markup.inline_keyboard[3][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1504,
+        16
+      ],
+      "id": "f0666e24-03c2-4e03-898b-a8362f9e28c7",
+      "name": "Start menu1",
+      "webhookId": "398f116f-bc8f-48bd-a682-88a49feafecb",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.menuConfig.stock.text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.menuConfig.stock.keyboard[0][0].text }}",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.menuConfig.stock.keyboard[0][0].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1488,
+        672
+      ],
+      "id": "b2ba43f5-a883-4b41-8bc1-91d8d7a47b0e",
+      "name": "Start menu2",
+      "webhookId": "cc95ad0d-2a6e-4707-96be-03a6d4cae13e",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1158317e-d93e-4177-ac35-cc40c2e491cd",
+              "leftValue": "={{ $json.hasMore }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1248,
+        432
+      ],
+      "id": "b70fe1a1-372a-400b-a1f6-0d9711d35277",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route by Intent').first().json.callback_query.message.chat.id }}",
+        "text": "={{ $('Code in JavaScript1').item.json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1040,
+        496
+      ],
+      "id": "87a477f5-57bb-45d4-9757-a83263a9cae1",
+      "name": "Все позиции1",
+      "webhookId": "568ce443-c39d-41ae-bd2e-2ba51847e66c",
+      "credentials": {
+        "telegramApi": {
+          "id": "yZaTWpqbMIpRrdDy",
+          "name": "Aleor bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger4": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Order, Stock",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Callback?": {
+      "main": [
+        [
+          {
+            "node": "Answer Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Update": {
+      "main": [
+        [
+          {
+            "node": "Is Callback?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Menu Message": {
+      "main": [
+        [
+          {
+            "node": "Start menu1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Callback": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "Build Menu Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Variant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Payment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply HowTo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Menu Message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start menu2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Manager": {
+      "main": [
+        [
+          {
+            "node": "Order -1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Customer": {
+      "main": [
+        []
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error in the order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order": {
+      "main": [
+        [
+          {
+            "node": "Order + 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Menu Message1": {
+      "main": [
+        [
+          {
+            "node": "Confused",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "How to check?": {
+      "main": [
+        [
+          {
+            "node": "Save Session Reset7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order, Stock": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Parse Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confused": {
+      "main": [
+        [
+          {
+            "node": "Order -",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Get session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get session": {
+      "main": [
+        [
+          {
+            "node": "Attach session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach session": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Order + 1": {
+      "main": [
+        []
+      ]
+    },
+    "Order -1": {
+      "main": [
+        [
+          {
+            "node": "Save Session Reset1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply HowTo": {
+      "main": [
+        [
+          {
+            "node": "Save Session Reset4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Payment": {
+      "main": [
+        [
+          {
+            "node": "Save Session Reset5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Reply Customer",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Manager1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Manager",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error in the order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Variant1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply Out of Stock1": {
+      "main": [
+        [
+          {
+            "node": "Save Session Reset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "In Stock?2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply HowTo2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "In Stock?2": {
+      "main": [
+        [
+          {
+            "node": "Send a photo reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Out of Stock1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a photo reply": {
+      "main": [
+        [
+          {
+            "node": "Save Session Reset6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Manager1": {
+      "main": [
+        [
+          {
+            "node": "Order -2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order -2": {
+      "main": [
+        [
+          {
+            "node": "Save Session Reset2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Session Reset4": {
+      "main": [
+        [
+          {
+            "node": "Order --",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Session Reset5": {
+      "main": [
+        [
+          {
+            "node": "Order-",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Session Reset7": {
+      "main": [
+        [
+          {
+            "node": "Order-1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Session Reset6": {
+      "main": [
+        [
+          {
+            "node": "Order-3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Session Reset": {
+      "main": [
+        [
+          {
+            "node": "Order-2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Variant": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Все позиции",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Все позиции1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "nXu9pHNJzfvZDqSZ"
+  },
+  "versionId": "23a59e96-98bf-4d2c-b42f-a642966fe4b6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "15d29ab73eb87eebab7ab53c6e981506a5ed8bb651e3ee6b4da7ff4e437920ef"
+  },
+  "id": "j92PZ1EIrCmFEC7i",
+  "tags": []
+}
