@@ -25,12 +25,11 @@ Optional /assets folder for screenshots or diagrams
 
 A full-featured Telegram shopping assistant for a clothing brand.
 Includes menu navigation, LLM-based order parsing, Airtable product catalog, session tracking and manager notifications.
-// link // 
+
 
 ### 2. RELY 2026 Telegram Bot
 
-Telegram bot workflow designed for handling structured requests, forwarding messages to managers, and processing customer intents.
-// link // 
+Telegram bot workflow designed for handling structured requests, forwarding messages to managers, and processing customer intents. 
 
 
 ## More workflows coming soon…
