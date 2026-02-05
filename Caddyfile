@@ -1,0 +1,11 @@
+n8nprojects.fit {
+	encode gzip
+	reverse_proxy n8n:5678
+}
+
+
+qdrantprojects.online {
+  encode gzip
+  reverse_proxy qdrant:6333
+}
+

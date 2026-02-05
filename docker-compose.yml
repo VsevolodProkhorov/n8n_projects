@@ -1,0 +1,55 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: always
+    environment:
+      TZ: Europe/Vienna
+      GENERIC_TIMEZONE: Europe/Vienna
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_HOST: n8nprojects.fit
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      N8N_SECURE_COOKIE: "true"
+      N8N_EDITOR_BASE_URL: https://n8nprojects.fit/
+      WEBHOOK_URL: https://n8nprojects.fit/
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+    volumes:
+      - /srv/n8n:/home/node/.n8n
+    networks:
+      - web
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    volumes:
+      - /srv/qdrant:/qdrant/storage
+    networks:
+      - web
+    expose:
+      - "6333"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /srv/caddy/data:/data
+      - /srv/caddy/config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - web
+    depends_on:
+      - n8n
+      - qdrant
+
+networks:
+  web:
