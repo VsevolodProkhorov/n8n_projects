@@ -1,27 +1,32 @@
+version: "3.9"
+
 services:
   n8n:
     image: n8nio/n8n:latest
     container_name: n8n
     restart: always
     environment:
-      TZ: Europe/Vienna
-      GENERIC_TIMEZONE: Europe/Vienna
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
-      N8N_HOST: n8nprojects.fit
-      N8N_PORT: 5678
-      N8N_PROTOCOL: https
-      N8N_SECURE_COOKIE: "true"
-      N8N_EDITOR_BASE_URL: https://n8nprojects.fit/
-      WEBHOOK_URL: https://n8nprojects.fit/
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      - TZ=Europe/Vienna
+      - GENERIC_TIMEZONE=Europe/Vienna
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_HOST=n8nprojects.fit
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - N8N_SECURE_COOKIE=true
+      - N8N_EDITOR_BASE_URL=https://n8nprojects.fit/
+      - WEBHOOK_URL=https://n8nprojects.fit/
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
     volumes:
       - /srv/n8n:/home/node/.n8n
     networks:
-      - web
+      - internal
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
+      postgres:
+        condition: service_healthy
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -30,9 +35,27 @@ services:
     volumes:
       - /srv/qdrant:/qdrant/storage
     networks:
-      - web
+      - internal
     expose:
       - "6333"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - /srv/postgres:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   caddy:
     image: caddy:2-alpine
@@ -44,12 +67,13 @@ services:
     volumes:
       - /srv/caddy/data:/data
       - /srv/caddy/config:/config
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /root/n8n/Caddyfile:/etc/caddy/Caddyfile:ro
     networks:
       - web
+      - internal
     depends_on:
       - n8n
-      - qdrant
 
 networks:
   web:
+  internal:
